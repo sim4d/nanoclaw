@@ -50,6 +50,7 @@ import {
   parseFeishuMessageEvent,
   getFeishuChat,
   getFeishuUser,
+  createFeishuWSClient,
   type FeishuEvent,
   type FeishuMessage,
 } from './feishu.js';
@@ -837,24 +838,113 @@ async function main(): Promise<void> {
   // Sync chat metadata
   await syncGroupMetadata();
 
-  // Create webhook server
-  const app = createWebhookApp();
-  const server = http.createServer(app);
+  const isHF = !!process.env.SPACE_ID;
 
-  server.listen(FEISHU_WEBHOOK_PORT, () => {
-    logger.info(
-      { port: FEISHU_WEBHOOK_PORT },
-      `Feishu webhook server listening`,
-    );
-    // Start Cloudflare tunnel for external access (only if not on Hugging Face)
-    if (!process.env.SPACE_ID) {
-      console.log(`\n⏳ Starting Cloudflare tunnel...\n`);
-      startCloudflareTunnel();
-    } else {
-      console.log(`\n🚀 Hugging Face Space detected, skipping Cloudflare tunnel.`);
-      console.log(`📡 Webhook: https://${process.env.SPACE_ID.replace('/', '-')}.hf.space/webhook/feishu`);
-    }
-  });
+  if (isHF) {
+    console.log(`\n🚀 Hugging Face Space detected, using Feishu Long Connection (WebSocket).`);
+    
+    const wsClient = createFeishuWSClient();
+    
+    // Register message handler
+    wsClient.on('im.message.receive_v1', async (data) => {
+      try {
+        const payload = data as any;
+        const msg = await parseFeishuMessageEvent(payload);
+        if (msg) {
+          // Store message
+          storeChatMetadata(msg.chat_id, msg.create_time);
+
+          const group = registeredGroups[msg.chat_id];
+
+          // Auto-register first chat as main channel if no groups registered yet
+          if (!group && Object.keys(registeredGroups).length === 0) {
+            logger.info(
+              { chatId: msg.chat_id, sender: msg.sender_name },
+              'Auto-registering first chat as main channel',
+            );
+
+            registerGroup(msg.chat_id, {
+              name: 'main',
+              folder: 'main',
+              trigger: `@${ASSISTANT_NAME}`,
+              added_at: new Date().toISOString(),
+            });
+
+            // Send welcome message
+            sendFeishuMessage(
+              msg.chat_id,
+              `👋 Welcome to NanoClaw!\n\nI'm ${ASSISTANT_NAME}, your personal AI assistant.\n\nThis chat has been registered as your main control channel.\n\nTry sending: @${ASSISTANT_NAME} hello`,
+            ).catch((err) => {
+              logger.error({ err }, 'Failed to send welcome message');
+            });
+          }
+
+          if (group) {
+            // Store message in database
+            storeMessage(
+              {
+                key: {
+                  remoteJid: msg.chat_id,
+                  fromMe: false,
+                  id: msg.message_id,
+                },
+                message: { conversation: msg.content },
+                messageTimestamp: Math.floor(msg.timestamp / 1000),
+                pushName: msg.sender_name,
+              } as any,
+              msg.chat_id,
+              false,
+              msg.sender_name,
+            );
+
+            // Process message asynchronously
+            processFeishuMessage(msg).catch((err) => {
+              logger.error({ err, messageId: msg.message_id }, 'Error processing message');
+            });
+          }
+        }
+      } catch (err) {
+        logger.error({ err }, 'Error handling Feishu WebSocket message');
+      }
+      
+      // WS handler expected to return nothing or a response object for card actions
+      return {};
+    });
+
+    // Start WebSocket connection
+    wsClient.start().catch((err) => {
+      logger.error({ err }, 'Failed to start Feishu WebSocket client');
+      process.exit(1);
+    });
+
+    // Still start health check server for HF
+    const app = express();
+    app.get('/health', (_req, res) => res.json({ status: 'ok', mode: 'websocket' }));
+    app.listen(FEISHU_WEBHOOK_PORT, () => {
+      logger.info({ port: FEISHU_WEBHOOK_PORT }, 'Health check server listening');
+    });
+
+  } else {
+    // Webhook mode for local deployment
+    // Create webhook server
+    const app = createWebhookApp();
+    const server = http.createServer(app);
+
+    server.listen(FEISHU_WEBHOOK_PORT, () => {
+      logger.info(
+        { port: FEISHU_WEBHOOK_PORT },
+        `Feishu webhook server listening`,
+      );
+      // Start Cloudflare tunnel for external access (only if not on Hugging Face)
+      if (!process.env.SPACE_ID) {
+        console.log(`\n⏳ Starting Cloudflare tunnel...\n`);
+        startCloudflareTunnel();
+      } else {
+        console.log(`\n🚀 Hugging Face Space detected, skipping Cloudflare tunnel.`);
+        console.log(`📡 Webhook: https://${process.env.SPACE_ID.replace('/', '-')}.hf.space/webhook/feishu`);
+      }
+    });
+  }
 
   // Start IPC watcher
   startIpcWatcher();

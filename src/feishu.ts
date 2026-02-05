@@ -4,6 +4,7 @@
  */
 
 import crypto from 'crypto';
+import * as lark from '@larksuiteoapi/node-sdk';
 
 import {
   FEISHU_APP_ID,
@@ -19,6 +20,17 @@ const FEISHU_API_BASE = 'https://open.feishu.cn/open-apis';
 // Store access token
 let accessToken: string | null = null;
 let tokenExpiry: number = 0;
+
+/**
+ * Initialize Feishu WebSocket client
+ */
+export function createFeishuWSClient() {
+  return new lark.WSClient({
+    appId: FEISHU_APP_ID,
+    appSecret: FEISHU_APP_SECRET,
+    loggerLevel: lark.LoggerLevel.info,
+  });
+}
 
 /**
  * Get tenant access token for API calls
