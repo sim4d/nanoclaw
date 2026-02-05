@@ -28,7 +28,16 @@ export function createFeishuWSClient() {
   return new lark.WSClient({
     appId: FEISHU_APP_ID,
     appSecret: FEISHU_APP_SECRET,
-    loggerLevel: lark.LoggerLevel.info,
+  });
+}
+
+/**
+ * Initialize Feishu Event Dispatcher
+ */
+export function createFeishuEventDispatcher() {
+  return new lark.EventDispatcher({
+    encryptKey: FEISHU_ENCRYPT_KEY,
+    verificationToken: FEISHU_VERIFICATION_TOKEN,
   });
 }
 
@@ -296,7 +305,7 @@ export interface FeishuEvent {
   };
 }
 
-export async function parseFeishuMessageEvent(event: FeishuEvent): Promise<FeishuMessage | null> {
+export async function parseFeishuMessageEvent(event: any): Promise<FeishuMessage | null> {
   const msg = event.event?.message;
   if (!msg) return null;
 

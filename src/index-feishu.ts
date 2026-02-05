@@ -51,6 +51,7 @@ import {
   getFeishuChat,
   getFeishuUser,
   createFeishuWSClient,
+  createFeishuEventDispatcher,
   type FeishuEvent,
   type FeishuMessage,
 } from './feishu.js';
@@ -844,75 +845,75 @@ async function main(): Promise<void> {
     console.log(`\n🚀 Hugging Face Space detected, using Feishu Long Connection (WebSocket).`);
     
     const wsClient = createFeishuWSClient();
+    const dispatcher = createFeishuEventDispatcher();
     
     // Register message handler
-    wsClient.on('im.message.receive_v1', async (data) => {
-      try {
-        const payload = data as any;
-        const msg = await parseFeishuMessageEvent(payload);
-        if (msg) {
-          // Store message
-          storeChatMetadata(msg.chat_id, msg.create_time);
+    dispatcher.register({
+      'im.message.receive_v1': async (data: any) => {
+        try {
+          const msg = await parseFeishuMessageEvent(data);
+          if (msg) {
+            // Store message
+            storeChatMetadata(msg.chat_id, msg.create_time);
 
-          const group = registeredGroups[msg.chat_id];
+            const group = registeredGroups[msg.chat_id];
 
-          // Auto-register first chat as main channel if no groups registered yet
-          if (!group && Object.keys(registeredGroups).length === 0) {
-            logger.info(
-              { chatId: msg.chat_id, sender: msg.sender_name },
-              'Auto-registering first chat as main channel',
-            );
+            // Auto-register first chat as main channel if no groups registered yet
+            if (!group && Object.keys(registeredGroups).length === 0) {
+              logger.info(
+                { chatId: msg.chat_id, sender: msg.sender_name },
+                'Auto-registering first chat as main channel',
+              );
 
-            registerGroup(msg.chat_id, {
-              name: 'main',
-              folder: 'main',
-              trigger: `@${ASSISTANT_NAME}`,
-              added_at: new Date().toISOString(),
-            });
+              registerGroup(msg.chat_id, {
+                name: 'main',
+                folder: 'main',
+                trigger: `@${ASSISTANT_NAME}`,
+                added_at: new Date().toISOString(),
+              });
 
-            // Send welcome message
-            sendFeishuMessage(
-              msg.chat_id,
-              `👋 Welcome to NanoClaw!\n\nI'm ${ASSISTANT_NAME}, your personal AI assistant.\n\nThis chat has been registered as your main control channel.\n\nTry sending: @${ASSISTANT_NAME} hello`,
-            ).catch((err) => {
-              logger.error({ err }, 'Failed to send welcome message');
-            });
+              // Send welcome message
+              sendFeishuMessage(
+                msg.chat_id,
+                `👋 Welcome to NanoClaw!\n\nI'm ${ASSISTANT_NAME}, your personal AI assistant.\n\nThis chat has been registered as your main control channel.\n\nTry sending: @${ASSISTANT_NAME} hello`,
+              ).catch((err) => {
+                logger.error({ err }, 'Failed to send welcome message');
+              });
+            }
+
+            if (group) {
+              // Store message in database
+              storeMessage(
+                {
+                  key: {
+                    remoteJid: msg.chat_id,
+                    fromMe: false,
+                    id: msg.message_id,
+                  },
+                  message: { conversation: msg.content },
+                  messageTimestamp: Math.floor(msg.timestamp / 1000),
+                  pushName: msg.sender_name,
+                } as any,
+                msg.chat_id,
+                false,
+                msg.sender_name,
+              );
+
+              // Process message asynchronously
+              processFeishuMessage(msg).catch((err) => {
+                logger.error({ err, messageId: msg.message_id }, 'Error processing message');
+              });
+            }
           }
-
-          if (group) {
-            // Store message in database
-            storeMessage(
-              {
-                key: {
-                  remoteJid: msg.chat_id,
-                  fromMe: false,
-                  id: msg.message_id,
-                },
-                message: { conversation: msg.content },
-                messageTimestamp: Math.floor(msg.timestamp / 1000),
-                pushName: msg.sender_name,
-              } as any,
-              msg.chat_id,
-              false,
-              msg.sender_name,
-            );
-
-            // Process message asynchronously
-            processFeishuMessage(msg).catch((err) => {
-              logger.error({ err, messageId: msg.message_id }, 'Error processing message');
-            });
-          }
+        } catch (err) {
+          logger.error({ err }, 'Error handling Feishu WebSocket message');
         }
-      } catch (err) {
-        logger.error({ err }, 'Error handling Feishu WebSocket message');
+        return {};
       }
-      
-      // WS handler expected to return nothing or a response object for card actions
-      return {};
     });
 
     // Start WebSocket connection
-    wsClient.start().catch((err) => {
+    wsClient.start({ eventDispatcher: dispatcher }).catch((err) => {
       logger.error({ err }, 'Failed to start Feishu WebSocket client');
       process.exit(1);
     });
@@ -926,7 +927,6 @@ async function main(): Promise<void> {
 
   } else {
     // Webhook mode for local deployment
-    // Create webhook server
     const app = createWebhookApp();
     const server = http.createServer(app);
 
