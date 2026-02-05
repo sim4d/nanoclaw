@@ -273,6 +273,17 @@ export async function getFeishuChat(chatId: string): Promise<FeishuChat | null> 
 /**
  * Parse Feishu event
  */
+export interface FeishuEvent {
+  header: {
+    event_id: string;
+    timestamp: string;
+    token: string;
+    app_id: string;
+    type: string;
+  };
+  event: any;
+}
+
 export async function parseFeishuMessageEvent(data: any): Promise<FeishuMessage | null> {
   // Support both wrapped 'event' structure (webhook) and flat structure (websocket)
   const event = data.event || data;
