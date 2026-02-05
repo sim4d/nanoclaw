@@ -512,6 +512,76 @@ async function processTaskIpc(
   }
 }
 
+async function handleFeishuEvent(data: any): Promise<any> {
+  try {
+    logger.info({ 
+      eventType: data.header?.event_type || data.type,
+      eventId: data.header?.event_id
+    }, 'Feishu event handler triggered');
+
+    const msg = await parseFeishuMessageEvent(data);
+    if (msg) {
+      logger.info({ chatId: msg.chat_id, content: msg.content }, 'Processing message from event');
+      // Store message
+      storeChatMetadata(msg.chat_id, msg.create_time);
+
+      const group = registeredGroups[msg.chat_id];
+
+      // Auto-register first chat as main channel if no groups registered yet
+      if (!group && Object.keys(registeredGroups).length === 0) {
+        logger.info(
+          { chatId: msg.chat_id, sender: msg.sender_name },
+          'Auto-registering first chat as main channel',
+        );
+
+        registerGroup(msg.chat_id, {
+          name: 'main',
+          folder: 'main',
+          trigger: `@${ASSISTANT_NAME}`,
+          added_at: new Date().toISOString(),
+        });
+
+        // Send welcome message
+        sendFeishuMessage(
+          msg.chat_id,
+          `👋 Welcome to NanoClaw!\n\nI'm ${ASSISTANT_NAME}, your personal AI assistant.\n\nThis chat has been registered as your main control channel.\n\nTry sending: @${ASSISTANT_NAME} hello`,
+        ).catch((err) => {
+          logger.error({ err }, 'Failed to send welcome message');
+        });
+      }
+
+      if (group) {
+        // Store message in database
+        storeMessage(
+          {
+            key: {
+              remoteJid: msg.chat_id,
+              fromMe: false,
+              id: msg.message_id,
+            },
+            message: { conversation: msg.content },
+            messageTimestamp: Math.floor(msg.timestamp / 1000),
+            pushName: msg.sender_name,
+          } as any,
+          msg.chat_id,
+          false,
+          msg.sender_name,
+        );
+
+        // Process message asynchronously
+        processFeishuMessage(msg).catch((err) => {
+          logger.error({ err, messageId: msg.message_id }, 'Error processing message');
+        });
+      }
+    } else {
+      logger.debug('Event was not a recognized message event or failed to parse');
+    }
+  } catch (err) {
+    logger.error({ err }, 'Error handling Feishu event');
+  }
+  return {};
+}
+
 // Create Express app for Feishu webhooks
 function createWebhookApp(): express.Application {
   const app = express();
@@ -538,7 +608,7 @@ function createWebhookApp(): express.Application {
         bodyPreview: bodyStr.substring(0, 100),
       }, 'Feishu webhook request received');
 
-      // Verify signature BEFORE decryption (signature is calculated on encrypted body)
+      // Verify signature BEFORE decryption
       if (timestamp && nonce && signature && FEISHU_ENCRYPT_KEY) {
         const isValid = verifyFeishuSignature(
           timestamp,
@@ -548,12 +618,7 @@ function createWebhookApp(): express.Application {
         );
         if (!isValid) {
           logger.warn({ timestamp, nonce }, 'Invalid Feishu signature');
-          // Don't return 401 - try to process anyway for development
-          // return res.status(401).json({ code: 401, msg: 'Unauthorized' });
         }
-        logger.debug('Feishu signature verified');
-      } else if (!timestamp || !nonce || !signature) {
-        logger.debug('Signature headers missing, skipping signature verification');
       }
 
       // Decrypt if payload is encrypted
@@ -561,44 +626,25 @@ function createWebhookApp(): express.Application {
         const parsed = JSON.parse(bodyStr);
         if (parsed.encrypt) {
           logger.info('Encrypted payload detected, decrypting...');
-          // Decrypt using AES-256-CBC
           const crypto = await import('crypto');
-
-          // The encrypt key needs to be processed
           const keyBytes = Buffer.from(FEISHU_ENCRYPT_KEY, 'utf8');
           const keyHash = crypto.createHash('sha256').update(keyBytes).digest();
-
-          // Parse the encrypted data
           const encryptedData = parsed.encrypt;
-          // Feishu uses base64 encoding
           const encryptedBuffer = Buffer.from(encryptedData, 'base64');
-
-          logger.debug({ encryptedLength: encryptedBuffer.length }, 'Encrypted buffer created');
-
-          // Extract IV (first 16 bytes) and ciphertext
           const iv = encryptedBuffer.slice(0, 16);
           const ciphertext = encryptedBuffer.slice(16);
-
-          logger.debug({ ivLength: iv.length, ciphertextLength: ciphertext.length }, 'IV and ciphertext extracted');
-
-          // Decrypt
           const decipher = crypto.createDecipheriv('aes-256-cbc', keyHash, iv);
           let decrypted = decipher.update(ciphertext);
           decrypted = Buffer.concat([decrypted, decipher.final()]);
-
           bodyStr = decrypted.toString('utf8');
-          logger.info({ decryptedLength: bodyStr.length, decryptedPreview: bodyStr.substring(0, 500) }, 'Payload decrypted successfully');
-        } else {
-          logger.debug('No encryption field found in payload');
         }
       } catch (decryptErr) {
-        logger.error({ decryptErr, stack: (decryptErr as Error).stack }, 'Decryption failed');
+        logger.error({ decryptErr }, 'Decryption failed');
       }
 
       let payload;
       try {
         payload = JSON.parse(bodyStr);
-        logger.info({ payloadType: (payload as any).header?.event_type || (payload as any).type, schema: (payload as any).schema }, 'Parsed webhook payload');
       } catch (parseErr) {
         logger.error({ parseErr, bodyStr }, 'Failed to parse webhook payload');
         return res.status(400).json({ code: 400, msg: 'Invalid JSON' });
@@ -606,94 +652,15 @@ function createWebhookApp(): express.Application {
 
       // URL verification challenge
       if (payload.type === 'url_verification') {
-        const urlVerify = payload as URLVerificationRequest;
-        logger.info({
-          challenge: urlVerify.challenge?.substring(0, 16) + '...',
-          token: urlVerify.token?.substring(0, 16) + '...',
-        }, 'Feishu URL verification received');
-
-        // Verify token
-        if (verifyFeishuToken(urlVerify.token)) {
-          const response: URLVerificationResponse = {
-            challenge: urlVerify.challenge,
-          };
-          logger.info('Feishu URL verification successful - returning challenge');
-          return res.json(response);
+        if (verifyFeishuToken(payload.token)) {
+          return res.json({ challenge: payload.challenge });
         } else {
-          logger.warn({ token: urlVerify.token, configuredToken: FEISHU_VERIFICATION_TOKEN ? FEISHU_VERIFICATION_TOKEN.substring(0, 8) + '...' : 'none' }, 'Invalid verification token');
           return res.status(401).json({ code: 401, msg: 'Unauthorized' });
         }
       }
 
       // Event handling
-      if (payload.header) {
-        const eventType = (payload.header as any).event_type || (payload.header as any).type;
-        const eventId = (payload.header as any).event_id;
-
-        logger.info(
-          { eventType, eventId },
-          'Feishu event received',
-        );
-
-        // Handle message events
-        if (eventType === 'im.message.receive_v1') {
-          const msg = await parseFeishuMessageEvent(payload as FeishuEvent);
-          if (msg) {
-            // Store message
-            storeChatMetadata(msg.chat_id, msg.create_time);
-
-            const group = registeredGroups[msg.chat_id];
-
-            // Auto-register first chat as main channel if no groups registered yet
-            if (!group && Object.keys(registeredGroups).length === 0) {
-              logger.info(
-                { chatId: msg.chat_id, sender: msg.sender_name },
-                'Auto-registering first chat as main channel',
-              );
-
-              registerGroup(msg.chat_id, {
-                name: 'main',
-                folder: 'main',
-                trigger: `@${ASSISTANT_NAME}`,
-                added_at: new Date().toISOString(),
-              });
-
-              // Send welcome message
-              sendFeishuMessage(
-                msg.chat_id,
-                `👋 Welcome to NanoClaw!\n\nI'm ${ASSISTANT_NAME}, your personal AI assistant.\n\nThis chat has been registered as your main control channel.\n\nTry sending: @${ASSISTANT_NAME} hello`,
-              ).catch((err) => {
-                logger.error({ err }, 'Failed to send welcome message');
-              });
-            }
-
-            if (group) {
-              // Store message in database
-              storeMessage(
-                {
-                  key: {
-                    remoteJid: msg.chat_id,
-                    fromMe: false,
-                    id: msg.message_id,
-                  },
-                  message: { conversation: msg.content },
-                  messageTimestamp: Math.floor(msg.timestamp / 1000),
-                  pushName: msg.sender_name,
-                } as any,
-                msg.chat_id,
-                false,
-                msg.sender_name,
-              );
-
-              // Process message asynchronously
-              processFeishuMessage(msg).catch((err) => {
-                logger.error({ err, messageId: msg.message_id }, 'Error processing message');
-              });
-            }
-          }
-        }
-      }
-
+      await handleFeishuEvent(payload);
       res.json({ code: 0, msg: 'success' });
     } catch (err) {
       logger.error({ err }, 'Error handling Feishu webhook');
@@ -756,64 +723,25 @@ function startCloudflareTunnel(): TunnelInfo {
     });
 
     if (hasNamedTunnel) {
-      // Named tunnel has known URL
       console.log(`\n🌐 Cloudflare Tunnel URL: ${tunnelUrl}`);
-      console.log(`📡 Webhook: ${tunnelUrl}/webhook/feishu`);
-      console.log(`❤️  Health: ${tunnelUrl}/health`);
-      console.log(`🔍 Debug: ${tunnelUrl}/debug`);
-      console.log(`\n✅ Use this URL in Feishu Event Subscription\n`);
       logger.info({ tunnelUrl }, 'Cloudflare named tunnel started');
     } else {
-      // Quick tunnel - parse URL from output
       let urlShown = false;
-      tunnel.stdout?.on('data', (data) => {
+      const logUrl = (data: any) => {
         const output = data.toString();
         const match = output.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/i);
         if (match && !urlShown) {
           urlShown = true;
           console.log(`\n🌐 Cloudflare Tunnel URL: ${match[0]}`);
-          console.log(`📡 Webhook: ${match[0]}/webhook/feishu`);
-          console.log(`❤️  Health: ${match[0]}/health`);
-          console.log(`\n✅ Use this URL in Feishu Event Subscription\n`);
           logger.info({ tunnelUrl: match[0] }, 'Cloudflare quick tunnel established');
         }
-      });
-
-      tunnel.stderr?.on('data', (data) => {
-        const output = data.toString();
-        const match = output.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/i);
-        if (match && !urlShown) {
-          urlShown = true;
-          console.log(`\n🌐 Cloudflare Tunnel URL: ${match[0]}`);
-          console.log(`📡 Webhook: ${match[0]}/webhook/feishu`);
-          console.log(`❤️  Health: ${match[0]}/health`);
-          console.log(`\n✅ Use this URL in Feishu Event Subscription\n`);
-          logger.info({ tunnelUrl: match[0] }, 'Cloudflare quick tunnel established');
-        }
-      });
+      };
+      tunnel.stdout?.on('data', logUrl);
+      tunnel.stderr?.on('data', logUrl);
     }
 
     tunnel.on('error', (err) => {
       logger.warn({ err }, 'Cloudflare tunnel process error');
-    });
-
-    tunnel.on('exit', (code) => {
-      if (code !== 0 && code !== null) {
-        logger.warn({ code }, 'Cloudflare tunnel exited');
-      }
-    });
-
-    // Clean up tunnel on exit
-    process.on('exit', () => {
-      tunnel.kill();
-    });
-    process.on('SIGINT', () => {
-      tunnel.kill();
-      process.exit(0);
-    });
-    process.on('SIGTERM', () => {
-      tunnel.kill();
-      process.exit(0);
     });
 
     return { url: hasNamedTunnel ? tunnelUrl : null, process: tunnel };
@@ -847,70 +775,17 @@ async function main(): Promise<void> {
     const wsClient = createFeishuWSClient();
     const dispatcher = createFeishuEventDispatcher();
     
-    // Register message handler
-    dispatcher.register({
-      'im.message.receive_v1': async (data: any) => {
-        try {
-          const msg = await parseFeishuMessageEvent(data);
-          if (msg) {
-            // Store message
-            storeChatMetadata(msg.chat_id, msg.create_time);
-
-            const group = registeredGroups[msg.chat_id];
-
-            // Auto-register first chat as main channel if no groups registered yet
-            if (!group && Object.keys(registeredGroups).length === 0) {
-              logger.info(
-                { chatId: msg.chat_id, sender: msg.sender_name },
-                'Auto-registering first chat as main channel',
-              );
-
-              registerGroup(msg.chat_id, {
-                name: 'main',
-                folder: 'main',
-                trigger: `@${ASSISTANT_NAME}`,
-                added_at: new Date().toISOString(),
-              });
-
-              // Send welcome message
-              sendFeishuMessage(
-                msg.chat_id,
-                `👋 Welcome to NanoClaw!\n\nI'm ${ASSISTANT_NAME}, your personal AI assistant.\n\nThis chat has been registered as your main control channel.\n\nTry sending: @${ASSISTANT_NAME} hello`,
-              ).catch((err) => {
-                logger.error({ err }, 'Failed to send welcome message');
-              });
-            }
-
-            if (group) {
-              // Store message in database
-              storeMessage(
-                {
-                  key: {
-                    remoteJid: msg.chat_id,
-                    fromMe: false,
-                    id: msg.message_id,
-                  },
-                  message: { conversation: msg.content },
-                  messageTimestamp: Math.floor(msg.timestamp / 1000),
-                  pushName: msg.sender_name,
-                } as any,
-                msg.chat_id,
-                false,
-                msg.sender_name,
-              );
-
-              // Process message asynchronously
-              processFeishuMessage(msg).catch((err) => {
-                logger.error({ err, messageId: msg.message_id }, 'Error processing message');
-              });
-            }
-          }
-        } catch (err) {
-          logger.error({ err }, 'Error handling Feishu WebSocket message');
-        }
+    // Register message handlers (using multiple common names to be safe)
+    const handlers = {
+      'im.message.receive_v1': handleFeishuEvent,
+      'p2.im.message.receive_v1': handleFeishuEvent,
+      'im.message.message_read_v1': async (data: any) => {
+        logger.debug({ eventId: data.header?.event_id }, 'Message read event received');
         return {};
       }
-    });
+    };
+
+    dispatcher.register(handlers);
 
     // Start WebSocket connection
     wsClient.start({ eventDispatcher: dispatcher }).catch((err) => {
@@ -935,13 +810,9 @@ async function main(): Promise<void> {
         { port: FEISHU_WEBHOOK_PORT },
         `Feishu webhook server listening`,
       );
-      // Start Cloudflare tunnel for external access (only if not on Hugging Face)
       if (!process.env.SPACE_ID) {
         console.log(`\n⏳ Starting Cloudflare tunnel...\n`);
         startCloudflareTunnel();
-      } else {
-        console.log(`\n🚀 Hugging Face Space detected, skipping Cloudflare tunnel.`);
-        console.log(`📡 Webhook: https://${process.env.SPACE_ID.replace('/', '-')}.hf.space/webhook/feishu`);
       }
     });
   }
