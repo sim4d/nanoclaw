@@ -794,14 +794,6 @@ async function main(): Promise<void> {
 
     dispatcher.register(handlers);
 
-    // Add a catch-all listener for debugging
-    wsClient.on('error', (err) => logger.error({ err }, 'Feishu WebSocket error'));
-    wsClient.on('close', () => logger.info('Feishu WebSocket connection closed'));
-    wsClient.on('message', (data) => {
-      // WS raw message for debugging if needed
-      // logger.debug({ data: data.toString() }, 'Raw WS message');
-    });
-
     // Start WebSocket connection
     wsClient.start({ eventDispatcher: dispatcher }).catch((err) => {
       logger.error({ err }, 'Failed to start Feishu WebSocket client');
