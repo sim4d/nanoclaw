@@ -18,8 +18,11 @@ RUN npm install
 # Copy source code
 COPY . .
 
-# Build TypeScript
+# Build TypeScript (Main App)
 RUN npm run build
+
+# Build TypeScript (Agent Runner - for local fallback)
+RUN cd container/agent-runner && npm install && npm run build
 
 # Create required directories for data persistence
 RUN mkdir -p data groups store logs

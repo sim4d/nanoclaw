@@ -23,7 +23,7 @@ const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
 const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
 
 // Detect which container runtime to use
-type ContainerRuntime = 'docker' | 'container';
+type ContainerRuntime = 'docker' | 'container' | 'local';
 
 function detectContainerRuntime(): ContainerRuntime {
   try {
@@ -36,7 +36,9 @@ function detectContainerRuntime(): ContainerRuntime {
       execSync('which container >/dev/null 2>&1', { stdio: 'ignore' });
       return 'container';
     } catch {
-      throw new Error('No container runtime found. Please install Docker or Apple Container.');
+      // If we are in a restricted environment like Hugging Face, fall back to local process
+      logger.warn('No container runtime found. Falling back to local process execution.');
+      return 'local';
     }
   }
 }
@@ -269,9 +271,27 @@ export async function runContainerAgent(
   fs.mkdirSync(logsDir, { recursive: true });
 
   return new Promise((resolve) => {
-    const container = spawn(CONTAINER_RUNTIME, containerArgs, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    let container;
+    
+    if (CONTAINER_RUNTIME === 'local') {
+      // Run as a local child process (for HF Spaces)
+      // Note: This bypasses isolation!
+      const agentPath = path.resolve(process.cwd(), 'container/agent-runner/dist/index.js');
+      container = spawn('node', [agentPath], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          // Pass environment variables that would normally be in the container
+          WORKSPACE_GROUP: path.join(GROUPS_DIR, group.folder),
+          WORKSPACE_GLOBAL: path.join(GROUPS_DIR, 'global'),
+          WORKSPACE_PROJECT: process.cwd(),
+        }
+      });
+    } else {
+      container = spawn(CONTAINER_RUNTIME, containerArgs, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+    }
 
     let stdout = '';
     let stderr = '';
