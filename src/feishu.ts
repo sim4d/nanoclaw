@@ -271,42 +271,14 @@ export async function getFeishuChat(chatId: string): Promise<FeishuChat | null> 
 }
 
 /**
- * Parse Feishu webhook event
+ * Parse Feishu event
  */
-export interface FeishuEvent {
-  header: {
-    event_id: string;
-    timestamp: string;
-    token: string;
-    app_id: string;
-    type: string;
-  };
-  event: {
-    operator: {
-      operator_id: string;
-      name: string;
-    };
-    operation_type: string;
-    message?: {
-      message_id: string;
-      chat_id: string;
-      chat_type: string;
-      content: string;
-      message_type: string;
-      create_time: string;
-      sender: {
-        sender_id: {
-          user_id: string;
-        };
-        sender_type: string;
-        name: string;
-      };
-    };
-  };
-}
-
-export async function parseFeishuMessageEvent(event: any): Promise<FeishuMessage | null> {
-  const msg = event.event?.message;
+export async function parseFeishuMessageEvent(data: any): Promise<FeishuMessage | null> {
+  // Support both wrapped 'event' structure (webhook) and flat structure (websocket)
+  const event = data.event || data;
+  const msg = event.message;
+  const sender = event.sender;
+  
   if (!msg) return null;
 
   let content = '';
@@ -334,8 +306,8 @@ export async function parseFeishuMessageEvent(event: any): Promise<FeishuMessage
   return {
     message_id: msg.message_id,
     chat_id: msg.chat_id,
-    sender_id: msg.sender?.sender_id?.user_id || '',
-    sender_name: msg.sender?.name || 'Unknown',
+    sender_id: sender?.sender_id?.open_id || sender?.sender_id?.user_id || '',
+    sender_name: sender?.name || 'Unknown',
     content,
     message_type: msg.message_type as 'text' | 'post' | 'interactive',
     timestamp: parseInt(msg.create_time),

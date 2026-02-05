@@ -783,6 +783,7 @@ async function main(): Promise<void> {
     const handlers = {
       'im.message.receive_v1': handleFeishuEvent,
       'p2.im.message.receive_v1': handleFeishuEvent,
+      'p2_im_message_receive_v1': handleFeishuEvent,
       'im.chat.access_event.bot_p2p_chat_entered_v1': async (data: any) => {
         logger.info({ eventId: data.header?.event_id }, 'Bot entered P2P chat');
         return {};
