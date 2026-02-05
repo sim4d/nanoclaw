@@ -576,7 +576,8 @@ async function handleFeishuEvent(data: any): Promise<any> {
     } else {
       logger.info({ 
         eventType: data.header?.event_type || data.type,
-        eventId: data.header?.event_id
+        eventId: data.header?.event_id,
+        body: JSON.stringify(data).substring(0, 1000)
       }, 'Unhandled Feishu event received');
     }
   } catch (err) {
