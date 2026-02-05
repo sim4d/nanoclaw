@@ -574,7 +574,10 @@ async function handleFeishuEvent(data: any): Promise<any> {
         });
       }
     } else {
-      logger.debug('Event was not a recognized message event or failed to parse');
+      logger.info({ 
+        eventType: data.header?.event_type || data.type,
+        eventId: data.header?.event_id
+      }, 'Unhandled Feishu event received');
     }
   } catch (err) {
     logger.error({ err }, 'Error handling Feishu event');
@@ -779,6 +782,10 @@ async function main(): Promise<void> {
     const handlers = {
       'im.message.receive_v1': handleFeishuEvent,
       'p2.im.message.receive_v1': handleFeishuEvent,
+      'im.chat.access_event.bot_p2p_chat_entered_v1': async (data: any) => {
+        logger.info({ eventId: data.header?.event_id }, 'Bot entered P2P chat');
+        return {};
+      },
       'im.message.message_read_v1': async (data: any) => {
         logger.debug({ eventId: data.header?.event_id }, 'Message read event received');
         return {};
@@ -786,6 +793,14 @@ async function main(): Promise<void> {
     };
 
     dispatcher.register(handlers);
+
+    // Add a catch-all listener for debugging
+    wsClient.on('error', (err) => logger.error({ err }, 'Feishu WebSocket error'));
+    wsClient.on('close', () => logger.info('Feishu WebSocket connection closed'));
+    wsClient.on('message', (data) => {
+      // WS raw message for debugging if needed
+      // logger.debug({ data: data.toString() }, 'Raw WS message');
+    });
 
     // Start WebSocket connection
     wsClient.start({ eventDispatcher: dispatcher }).catch((err) => {
