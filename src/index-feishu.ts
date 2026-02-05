@@ -846,13 +846,14 @@ async function main(): Promise<void> {
       { port: FEISHU_WEBHOOK_PORT },
       `Feishu webhook server listening`,
     );
-    console.log(`\n🚀 NanoClaw (Feishu) is running!`);
-    console.log(`🔌 Local server: http://localhost:${FEISHU_WEBHOOK_PORT}`);
-    console.log(`🤖 Assistant: @${ASSISTANT_NAME}`);
-    console.log(`\n⏳ Starting Cloudflare tunnel...\n`);
-
-    // Start Cloudflare tunnel for external access
-    startCloudflareTunnel();
+    // Start Cloudflare tunnel for external access (only if not on Hugging Face)
+    if (!process.env.SPACE_ID) {
+      console.log(`\n⏳ Starting Cloudflare tunnel...\n`);
+      startCloudflareTunnel();
+    } else {
+      console.log(`\n🚀 Hugging Face Space detected, skipping Cloudflare tunnel.`);
+      console.log(`📡 Webhook: https://${process.env.SPACE_ID.replace('/', '-')}.hf.space/webhook/feishu`);
+    }
   });
 
   // Start IPC watcher

@@ -52,6 +52,6 @@ export const FEISHU_APP_SECRET = process.env.FEISHU_APP_SECRET || '';
 export const FEISHU_ENCRYPT_KEY = process.env.FEISHU_ENCRYPT_KEY || '';
 export const FEISHU_VERIFICATION_TOKEN = process.env.FEISHU_VERIFICATION_TOKEN || '';
 export const FEISHU_WEBHOOK_PORT = parseInt(
-  process.env.FEISHU_WEBHOOK_PORT || '3000',
+  process.env.FEISHU_WEBHOOK_PORT || process.env.PORT || '3000',
   10,
 );
