@@ -177,11 +177,7 @@ async function processFeishuMessage(msg: FeishuMessage): Promise<void> {
     triggerPattern: TRIGGER_PATTERN.toString()
   }, 'Processing message details');
 
-  // Main group responds to all messages; other groups require trigger prefix
-  if (!isMainGroup && !hasTrigger) {
-    logger.info({ chatId: msg.chat_id, content }, 'Message without trigger in non-main group, ignoring');
-    return;
-  }
+  // Process all messages in registered groups (no trigger required)
 
   // Get all messages since last agent interaction
   const sinceTimestamp = lastAgentTimestamp[msg.chat_id] || '';

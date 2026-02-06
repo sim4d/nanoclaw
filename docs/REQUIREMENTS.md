@@ -43,8 +43,7 @@ A personal AI assistant accessible via Feishu, with minimal custom code.
 ### Message Routing
 - A router listens to Feishu via WebSocket and routes messages based on configuration
 - Only messages from registered groups are processed
-- Trigger: `@Andy` prefix (case insensitive) for non-main groups
-- Main channel processes all messages automatically
+- No trigger word required for registered groups
 
 ### Memory System
 - **Per-group memory**: Each group has a folder with its own `CLAUDE.md`

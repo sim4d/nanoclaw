@@ -177,7 +177,7 @@ Required variables in `.env`:
    ▼
 4. Event handler processes message:
    ├── Is chat_id registered? (First chat auto-registers as 'main')
-   └── Should we respond? (Main: always; Others: @Andy trigger)
+   └── All messages in registered chats are processed automatically
    │
    ▼
 5. Message processor:

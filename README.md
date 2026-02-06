@@ -56,15 +56,16 @@ Configure the following variables in your `.env` (local) or as **Secrets** (Hugg
 
 ## Usage
 
-Talk to your assistant with the trigger word (default: `@Andy`):
+Simply message your bot in Feishu. The first chat to message the bot will automatically be registered as the **Main Channel** (Admin).
 
-```
-@Andy send an overview of the sales pipeline every weekday morning at 9am
-@Andy review the git history for the past week each Friday and update the README if there's drift
-@Andy every Monday at 8am, compile news on AI developments from Hacker News and TechCrunch and message me a briefing
-```
+The bot will respond to all messages in registered chats without requiring a trigger word.
 
-From the **Main Channel** (your private chat), you can manage groups and tasks without needing to use the `@Andy` trigger.
+### Examples:
+- "Send an overview of the sales pipeline every weekday morning at 9am"
+- "Review the git history for the past week each Friday and update the README if there's drift"
+- "Every Monday at 8am, compile news on AI developments from Hacker News and TechCrunch and message me a briefing"
+
+From the **Main Channel** (your private chat), you can manage groups and tasks.
 
 ## Architecture
 
