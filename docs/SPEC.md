@@ -73,7 +73,7 @@ A personal AI assistant accessible via Feishu (Lark), with persistent memory per
 |-----------|------------|---------|
 | Feishu Connection | Node.js (@larksuiteoapi/node-sdk) | Connect to Feishu via WebSocket |
 | Message Storage | SQLite (better-sqlite3) | Store messages for context |
-| Agent | Google Gemini API | High-speed, high-quality reasoning |
+| Agent | Claude Agent SDK (or compatible) | Advanced reasoning and tool use |
 | Runtime | Node.js 20+ | Host process for routing and scheduling |
 
 ---
@@ -109,7 +109,7 @@ nanoclaw/
 │       ├── package.json
 │       ├── tsconfig.json
 │       └── src/
-│           └── index.ts           # Entry point (Gemini API + Tools)
+│           └── index.ts           # Entry point (AI Agent + Tools)
 │
 ├── dist/                          # Compiled JavaScript (gitignored)
 │
@@ -153,10 +153,11 @@ Required variables in `.env`:
 - `FEISHU_APP_ID`
 - `FEISHU_APP_SECRET`
 
-### Gemini Configuration
+### AI Configuration
 
-- `GEMINI_API_KEY`: Required for agent execution
-- `GEMINI_MODEL`: Default is `gemini-2.5-flash`
+- `ANTHROPIC_API_KEY`: Required for agent execution
+- `ANTHROPIC_BASE_URL`: Optional (for proxies)
+- `ANTHROPIC_MODEL`: Default model
 
 ---
 
@@ -187,7 +188,7 @@ Required variables in `.env`:
    ▼
 6. Invokes Agent Runner:
    ├── Sets environment (WORKSPACE_GROUP, etc.)
-   └── Calls Gemini API with tools
+   └── Calls AI Agent with tools
    │
    ▼
 7. Agent processes message:

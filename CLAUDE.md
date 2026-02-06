@@ -4,7 +4,7 @@ Personal AI assistant. See [README.md](README.md) for philosophy and setup. See 
 
 ## Quick Context
 
-Single Node.js process that connects to Feishu via WebSocket, routes messages to Gemini API running in local process (HF Space) or container. Each group has isolated filesystem and memory.
+Single Node.js process that connects to Feishu via WebSocket, routes messages to an AI agent running in local process (HF Space) or container. Each group has isolated filesystem and memory.
 
 ## Key Files
 
@@ -37,6 +37,5 @@ npm run build        # Compile TypeScript
 ```
 
 AI Configuration:
-- Set `GEMINI_API_KEY` in `.env`
-- Default model is `gemini-2.5-flash`
-- Configure `GEMINI_MODEL` in `.env` to override
+- Configure `ANTHROPIC_API_KEY` (or token) and `ANTHROPIC_BASE_URL` in `.env`
+- Models are configured via `ANTHROPIC_MODEL` and `ANTHROPIC_SMALL_FAST_MODEL`

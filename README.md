@@ -21,7 +21,7 @@ npm install
 npm run build
 ```
 
-Configure `FEISHU_APP_ID`, `FEISHU_APP_SECRET`, and `GEMINI_API_KEY` in `.env`.
+Configure `FEISHU_APP_ID`, `FEISHU_APP_SECRET`, and `ANTHROPIC_API_KEY` in `.env`.
 
 ## Philosophy
 
@@ -42,7 +42,7 @@ Configure `FEISHU_APP_ID`, `FEISHU_APP_SECRET`, and `GEMINI_API_KEY` in `.env`.
 - **Main channel** - Your private channel for admin control; every other group is completely isolated
 - **Scheduled tasks** - Recurring jobs that run the agent and can message you back
 - **Web access** - Search and fetch content
-- **Gemini Powered** - Uses Google Gemini API for high-speed, high-quality reasoning
+- **AI Powered** - Uses advanced LLMs via Anthropic API or compatible proxies
 
 ## Usage
 
@@ -70,7 +70,7 @@ join the Family Chat group
 ## Architecture
 
 ```
-Feishu (WebSocket) --> SQLite --> Local Process/Container (Gemini API) --> Response
+Feishu (WebSocket) --> SQLite --> Local Process/Container (AI Agent) --> Response
 ```
 
 Single Node.js process. Agents execute in isolated environments with mounted directories. IPC via filesystem. No daemons, no queues, no complexity.

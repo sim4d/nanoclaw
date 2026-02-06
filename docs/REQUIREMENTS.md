@@ -29,7 +29,7 @@ No configuration sprawl. If you want different behavior, modify the code. The co
 A personal AI assistant accessible via Feishu, with minimal custom code.
 
 **Core components:**
-- **Gemini API** as the core agent
+- **AI Agent** as the core agent (Claude SDK or compatible)
 - **Isolated Environments** for safe agent execution
 - **Feishu** as the primary I/O channel
 - **Persistent memory** per conversation and globally

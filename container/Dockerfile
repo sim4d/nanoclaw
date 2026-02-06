@@ -1,5 +1,5 @@
 # NanoClaw Agent Container
-# Runs Google Gemini 2.5 API in isolated Linux VM
+# Runs AI Agent in isolated Linux VM
 
 FROM node:22-slim
 

@@ -73,7 +73,7 @@ Messages and task operations are verified against group identity:
 **Credential Filtering:**
 Only specific environment variables are exposed to execution environments:
 ```typescript
-const allowedVars = ['ANTHROPIC_API_KEY', 'GEMINI_API_KEY', ...];
+const allowedVars = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_MODEL', 'ANTHROPIC_SMALL_FAST_MODEL'];
 ```
 
 ## Security Architecture Diagram

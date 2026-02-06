@@ -60,9 +60,7 @@ export const FEISHU_WEBHOOK_PORT = parseInt(
 );
 
 // LLM Configuration
-// Supports both Anthropic API (Claude) and Google Gemini API
-// For Gemini: Set GEMINI_API_KEY in .env (local) or as HF Secret (Hugging Face)
-export const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+// Supports Anthropic API (Claude) or compatible proxies
 export const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 export const ANTHROPIC_AUTH_TOKEN = process.env.ANTHROPIC_AUTH_TOKEN || '';
 export const ANTHROPIC_BASE_URL = process.env.ANTHROPIC_BASE_URL || '';

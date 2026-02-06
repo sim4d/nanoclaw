@@ -1,6 +1,5 @@
 # NanoClaw - Official Docker Image
 # Optimized for Hugging Face Spaces and containerized environments
-# Uses Google Gemini 2.5 API
 
 FROM node:22-slim
 
@@ -22,7 +21,7 @@ COPY . .
 # Build TypeScript (Main App)
 RUN npm run build
 
-# Build TypeScript (Agent Runner - Gemini version)
+# Build TypeScript (Agent Runner)
 RUN cd container/agent-runner && npm install && npm run build
 
 # Create required directories for data persistence
