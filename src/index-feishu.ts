@@ -561,22 +561,33 @@ async function processTaskIpc(
 
 async function handleFeishuEvent(data: any): Promise<any> {
   try {
+    const eventType = data.header?.event_type || data.type;
+    const eventId = data.header?.event_id;
+    
     logger.info({ 
-      eventType: data.header?.event_type || data.type,
-      eventId: data.header?.event_id
+      eventType,
+      eventId,
+      hasEvent: !!data.event,
+      hasMessage: !!(data.event?.message || data.message)
     }, 'Feishu event handler triggered');
 
     const msg = await parseFeishuMessageEvent(data);
     if (msg) {
-      logger.info({ chatId: msg.chat_id, content: msg.content }, 'Processing message from event');
+      logger.info({ 
+        chatId: msg.chat_id, 
+        messageId: msg.message_id, 
+        content: msg.content,
+        timestamp: msg.timestamp 
+      }, 'Processing message from event');
       // Store message
       storeChatMetadata(msg.chat_id, msg.create_time);
 
       let group = registeredGroups[msg.chat_id];
-      logger.info({ chatId: msg.chat_id, hasGroup: !!group }, 'Feishu message received and parsed');
+      const totalGroups = Object.keys(registeredGroups).length;
+      logger.info({ chatId: msg.chat_id, hasGroup: !!group, totalGroups }, 'Feishu message lookup results');
 
       // Auto-register first chat as main channel if no groups registered yet
-      if (!group && Object.keys(registeredGroups).length === 0) {
+      if (!group && totalGroups === 0) {
         logger.info(
           { chatId: msg.chat_id, sender: msg.sender_name },
           'Auto-registering first chat as main channel',
@@ -594,14 +605,14 @@ async function handleFeishuEvent(data: any): Promise<any> {
         // Send welcome message
         sendFeishuMessage(
           msg.chat_id,
-          `👋 Welcome to NanoClaw!\n\nI'm ${ASSISTANT_NAME}, your personal AI assistant.\n\nThis chat has been registered as your main control channel.\n\nTry sending: @${ASSISTANT_NAME} hello`,
+          `👋 Welcome to NanoClaw!\n\nI'm ${ASSISTANT_NAME}, your personal AI assistant.\n\nThis chat has been registered as your main control channel.\n\nTry sending: hello`,
         ).catch((err) => {
           logger.error({ err }, 'Failed to send welcome message');
         });
       }
 
       if (group) {
-        logger.info({ chatId: msg.chat_id, isMain: group.folder === MAIN_GROUP_FOLDER }, 'Group found, storing and processing message');
+        logger.info({ chatId: msg.chat_id, groupFolder: group.folder }, 'Calling processFeishuMessage');
         // Store message in database
         storeMessage(
           {
@@ -621,20 +632,20 @@ async function handleFeishuEvent(data: any): Promise<any> {
 
         // Process message asynchronously
         processFeishuMessage(msg).catch((err) => {
-          logger.error({ err, messageId: msg.message_id }, 'Error processing message');
+          logger.error({ err, messageId: msg.message_id }, 'Error in processFeishuMessage');
         });
       } else {
-        logger.info({ chatId: msg.chat_id }, 'No group found for message and not auto-registered');
+        logger.warn({ chatId: msg.chat_id }, 'No group found and auto-registration conditions not met');
       }
     } else {
       logger.info({ 
-        eventType: data.header?.event_type || data.type,
-        eventId: data.header?.event_id,
+        eventType,
+        eventId,
         body: JSON.stringify(data).substring(0, 1000)
       }, 'Unhandled Feishu event received');
     }
   } catch (err) {
-    logger.error({ err }, 'Error handling Feishu event');
+    logger.error({ err, dataPreview: JSON.stringify(data).substring(0, 200) }, 'Error handling Feishu event');
   }
   return {};
 }

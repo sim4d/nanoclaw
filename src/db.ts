@@ -243,9 +243,12 @@ export function getMessagesSince(
     WHERE chat_jid = ? AND timestamp > ? AND content NOT LIKE ?
     ORDER BY timestamp
   `;
-  return db
+  const messages = db
     .prepare(sql)
     .all(chatJid, sinceTimestamp, `${botPrefix}:%`) as NewMessage[];
+  
+  // logger.debug({ chatJid, sinceTimestamp, count: messages.length }, 'getMessagesSince query completed');
+  return messages;
 }
 
 export function createTask(

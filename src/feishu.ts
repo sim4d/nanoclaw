@@ -296,7 +296,10 @@ export async function parseFeishuMessageEvent(data: any): Promise<FeishuMessage 
   const msg = event.message;
   const sender = event.sender;
   
-  if (!msg) return null;
+  if (!msg) {
+    logger.debug({ rawData: JSON.stringify(data).substring(0, 500) }, 'No message found in Feishu event');
+    return null;
+  }
 
   let content = '';
   try {
