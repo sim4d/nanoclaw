@@ -12,37 +12,47 @@ NanoClaw is a lightweight, self-hosted AI assistant that turns **Feishu (Lark)**
 
 Built for simplicity and security, NanoClaw gives you core automated agent functionality in a codebase you can understand in 8 minutes. One process. A handful of files. Logic runs in isolated environments with filesystem isolation.
 
-## Quick Start
+## Key Features
 
+- **Feishu Interface** - Message your agent via Feishu (Lark) WebSocket connection (no public IP required).
+- **Claude Code Harness** - Powered by the `claude-agent-sdk`, giving your agent full access to terminal, file editing, and research tools.
+- **CLIProxyAPI Optimized** - Seamlessly integrates with custom API proxies for high-performance LLM access.
+- **Persistent Memory** - Each chat group has its own isolated filesystem and memory (`groups/folder/CLAUDE.md`).
+- **Automated Tasks** - Schedule repetitive prompts using cron or intervals.
+- **Deployment Ready** - Optimized for **WSL + Docker** (local) and **Hugging Face Spaces + Docker** (remote).
+
+## Deployment Options
+
+### 1. Local (WSL + Docker)
+NanoClaw is optimized for Windows Subsystem for Linux (WSL).
 ```bash
-git clone https://github.com/gavrielc/nanoclaw.git
+git clone https://github.com/sim4d/nanoclaw.git
 cd nanoclaw
 npm install
 npm run build
+# Configure .env
+npm run start
 ```
 
-Configure `FEISHU_APP_ID`, `FEISHU_APP_SECRET`, and `ANTHROPIC_API_KEY` in `.env`.
+### 2. Remote (Hugging Face Spaces)
+The project is designed to run as a Docker-based Space on Hugging Face. 
+- **Auto-Generated Images**: Every push to the `main` branch automatically builds a new Docker image via GitHub Actions and pushes it to **GHCR (GitHub Container Registry)**.
+- **Easy Sync**: Simply point your Hugging Face Space to this repository or use the GHCR image for a fast, reliable deployment.
 
-## Philosophy
+## Configuration
 
-**Small enough to understand.** One process, a few source files. No microservices, no message queues, no abstraction layers.
+Configure the following variables in your `.env` (local) or as **Secrets** (Hugging Face):
 
-**Secure by isolation.** Logic runs in isolated environments (Docker or restricted local processes). Agents can only see what's explicitly mounted.
+### Feishu (Lark)
+- `FEISHU_APP_ID`: Your app ID from the Feishu Developer Console.
+- `FEISHU_APP_SECRET`: Your app secret.
+- *Ensure "Receive events via persistent connection" is enabled in your Feishu app settings.*
 
-**Built for one user.** This isn't a framework. It's working software that fits my exact needs. You fork it and make it match your exact needs.
-
-**Customization = code changes.** No configuration sprawl. Want different behavior? Modify the code. The codebase is small enough that this is safe.
-
-**AI-native.** No complex installation wizard. Ask the agent what's happening. Describe the problem, the agent fixes it.
-
-## What It Supports
-
-- **Feishu I/O** - Message NanoClaw from your phone or desktop
-- **Isolated group context** - Each group has its own `CLAUDE.md` memory, isolated filesystem, and runs in its own sandbox with only that filesystem mounted
-- **Main channel** - Your private channel for admin control; every other group is completely isolated
-- **Scheduled tasks** - Recurring jobs that run the agent and can message you back
-- **Web access** - Search and fetch content
-- **AI Powered** - Uses advanced LLMs via Anthropic API or compatible proxies
+### LLM (CLIProxyAPI)
+- `ANTHROPIC_BASE_URL`: Your proxy endpoint (e.g., `https://simford-cpa.hf.space`).
+- `ANTHROPIC_AUTH_TOKEN`: Your API token.
+- `ANTHROPIC_MODEL`: Primary model (e.g., `gemini-2.5-pro`).
+- `ANTHROPIC_SMALL_FAST_MODEL`: Fallback/fast model (e.g., `gemini-2.5-flash`).
 
 ## Usage
 
@@ -54,23 +64,12 @@ Talk to your assistant with the trigger word (default: `@Andy`):
 @Andy every Monday at 8am, compile news on AI developments from Hacker News and TechCrunch and message me a briefing
 ```
 
-From the main channel (your self-chat), you can manage groups and tasks:
-```
-list all scheduled tasks across groups
-pause the Monday briefing task
-join the Family Chat group
-```
-
-## Requirements
-
-- macOS or Linux
-- Node.js 20+
-- [Docker](https://docker.com/products/docker-desktop) (optional, for container isolation)
+From the **Main Channel** (your private chat), you can manage groups and tasks without needing to use the `@Andy` trigger.
 
 ## Architecture
 
 ```
-Feishu (WebSocket) --> SQLite --> Local Process/Container (AI Agent) --> Response
+Feishu (WebSocket) --> SQLite --> Local Process/Docker (Claude Agent SDK) --> Response
 ```
 
 Single Node.js process. Agents execute in isolated environments with mounted directories. IPC via filesystem. No daemons, no queues, no complexity.
@@ -78,24 +77,10 @@ Single Node.js process. Agents execute in isolated environments with mounted dir
 Key files:
 - `src/index-feishu.ts` - Main app: Feishu connection, routing, IPC
 - `src/feishu.ts` - Feishu API and event handling
-- `src/container-runner.ts` - Spawns agent executions
+- `src/container-runner.ts` - Handles agent execution lifecycle
 - `src/task-scheduler.ts` - Runs scheduled tasks
 - `src/db.ts` - SQLite operations
 - `groups/*/CLAUDE.md` - Per-group memory
-
-## FAQ
-
-**Why Feishu?**
-
-Because it provides a great developer experience with WebSocket support, making it easy to host bots even behind NAT or on platforms like Hugging Face Spaces.
-
-**Is this secure?**
-
-Logic runs in isolated environments, not behind application-level permission checks. They can only access explicitly mounted directories. See [docs/SECURITY.md](docs/SECURITY.md) for the full security model.
-
-**Why no configuration files?**
-
-We don't want configuration sprawl. Every user should customize it so that the code matches exactly what they want rather than configuring a generic system.
 
 ## License
 
