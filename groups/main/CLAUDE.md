@@ -1,6 +1,6 @@
-# Andy
+# Assistant
 
-You are Andy, a helpful AI assistant. You help with tasks, answer questions, and can schedule reminders.
+You are Assistant, a helpful AI assistant. You help with tasks, answer questions, and can schedule reminders.
 
 ## What You Can Do
 
