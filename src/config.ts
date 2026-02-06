@@ -47,11 +47,19 @@ export const TIMEZONE =
   process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 // Feishu (Lark) Configuration
+// NOTE: This project uses WebSocket mode for Feishu (both local and HF deployments)
+// Only FEISHU_APP_ID and FEISHU_APP_SECRET are required for WebSocket mode
+// FEISHU_ENCRYPT_KEY and FEISHU_VERIFICATION_TOKEN are ONLY needed for webhook mode
 export const FEISHU_APP_ID = process.env.FEISHU_APP_ID || '';
 export const FEISHU_APP_SECRET = process.env.FEISHU_APP_SECRET || '';
-export const FEISHU_ENCRYPT_KEY = process.env.FEISHU_ENCRYPT_KEY || '';
-export const FEISHU_VERIFICATION_TOKEN = process.env.FEISHU_VERIFICATION_TOKEN || '';
+export const FEISHU_ENCRYPT_KEY = process.env.FEISHU_ENCRYPT_KEY || ''; // Webhook only
+export const FEISHU_VERIFICATION_TOKEN = process.env.FEISHU_VERIFICATION_TOKEN || ''; // Webhook only
 export const FEISHU_WEBHOOK_PORT = parseInt(
   process.env.FEISHU_WEBHOOK_PORT || process.env.PORT || '3000',
   10,
 );
+
+// LLM Configuration
+// Supports both Anthropic API (Claude) and Google Gemini API
+// For Gemini: Set GEMINI_API_KEY in .env (local) or as HF Secret (Hugging Face)
+export const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';

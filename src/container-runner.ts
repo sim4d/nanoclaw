@@ -159,10 +159,11 @@ function buildVolumeMounts(
       'ANTHROPIC_BASE_URL',
       'ANTHROPIC_MODEL',
       'ANTHROPIC_SMALL_FAST_MODEL',
+      'GEMINI_API_KEY',
       'FEISHU_APP_ID',
       'FEISHU_APP_SECRET',
-      'FEISHU_ENCRYPT_KEY',
-      'FEISHU_VERIFICATION_TOKEN',
+      // FEISHU_ENCRYPT_KEY and FEISHU_VERIFICATION_TOKEN are NOT needed for WebSocket mode
+      // They are only used for webhook signature verification and URL challenge
       'FEISHU_WEBHOOK_PORT',
     ];
     const filteredLines = envContent.split('\n').filter((line) => {
@@ -277,7 +278,7 @@ export async function runContainerAgent(
       // Run as a local child process (for HF Spaces)
       // Note: This bypasses isolation!
       const agentPath = path.resolve(process.cwd(), 'container/agent-runner/dist/index.js');
-      container = spawn('node', [agentPath], {
+      container = spawn(process.execPath, [agentPath], {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
           ...process.env,
@@ -288,8 +289,12 @@ export async function runContainerAgent(
         }
       });
     } else {
+      // For Docker/Container, spawn with minimal environment
+      const containerEnv: Record<string, string> = {};
+
       container = spawn(CONTAINER_RUNTIME, containerArgs, {
         stdio: ['pipe', 'pipe', 'pipe'],
+        env: containerEnv,
       });
     }
 

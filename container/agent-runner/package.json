@@ -2,15 +2,16 @@
   "name": "nanoclaw-agent-runner",
   "version": "1.0.0",
   "type": "module",
-  "description": "Container-side agent runner for NanoClaw",
+  "description": "Container-side agent runner for NanoClaw with Gemini",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.2.29",
-    "cron-parser": "^5.0.0",
+    "@google/generative-ai": "^0.21.0",
+    "glob": "^11.0.1",
+    "undici": "^7.3.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {

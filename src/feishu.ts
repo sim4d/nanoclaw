@@ -25,19 +25,25 @@ let tokenExpiry: number = 0;
  * Initialize Feishu WebSocket client
  */
 export function createFeishuWSClient() {
-  return new lark.WSClient({
+  const config: any = {
     appId: FEISHU_APP_ID,
     appSecret: FEISHU_APP_SECRET,
-  });
+    domain: lark.Domain.Feishu,
+  };
+
+  return new lark.WSClient(config);
 }
 
 /**
  * Initialize Feishu Event Dispatcher
+ * Note: encryptKey and verificationToken are NOT needed for WebSocket mode
+ * They are only required for webhook mode (signature verification and URL challenge)
  */
 export function createFeishuEventDispatcher() {
   return new lark.EventDispatcher({
-    encryptKey: FEISHU_ENCRYPT_KEY,
-    verificationToken: FEISHU_VERIFICATION_TOKEN,
+    // WebSocket mode doesn't need these - authentication is via appId/appSecret
+    encryptKey: undefined,
+    verificationToken: undefined,
   });
 }
 

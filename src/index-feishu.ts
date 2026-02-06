@@ -773,58 +773,41 @@ async function main(): Promise<void> {
 
   const isHF = !!process.env.SPACE_ID;
 
-  if (isHF) {
-    console.log(`\n🚀 Hugging Face Space detected, using Feishu Long Connection (WebSocket).`);
-    
-    const wsClient = createFeishuWSClient();
-    const dispatcher = createFeishuEventDispatcher();
-    
-    // Register message handlers (using multiple common names to be safe)
-    const handlers = {
-      'im.message.receive_v1': handleFeishuEvent,
-      'p2.im.message.receive_v1': handleFeishuEvent,
-      'p2_im_message_receive_v1': handleFeishuEvent,
-      'im.chat.access_event.bot_p2p_chat_entered_v1': async (data: any) => {
-        logger.info({ eventId: data.header?.event_id }, 'Bot entered P2P chat');
-        return {};
-      },
-      'im.message.message_read_v1': async (data: any) => {
-        logger.debug({ eventId: data.header?.event_id }, 'Message read event received');
-        return {};
-      }
-    };
+  // Always use WebSocket for both local and HF deployments
+  console.log(`\n🚀 Using Feishu Long Connection (WebSocket) for ${isHF ? 'Hugging Face' : 'local'} deployment.`);
 
-    dispatcher.register(handlers);
+  const wsClient = createFeishuWSClient();
+  const dispatcher = createFeishuEventDispatcher();
 
-    // Start WebSocket connection
-    wsClient.start({ eventDispatcher: dispatcher }).catch((err) => {
-      logger.error({ err }, 'Failed to start Feishu WebSocket client');
-      process.exit(1);
-    });
+  // Register message handlers (using multiple common names to be safe)
+  const handlers = {
+    'im.message.receive_v1': handleFeishuEvent,
+    'p2.im.message.receive_v1': handleFeishuEvent,
+    'p2_im_message_receive_v1': handleFeishuEvent,
+    'im.chat.access_event.bot_p2p_chat_entered_v1': async (data: any) => {
+      logger.info({ eventId: data.header?.event_id }, 'Bot entered P2P chat');
+      return {};
+    },
+    'im.message.message_read_v1': async (data: any) => {
+      logger.debug({ eventId: data.header?.event_id }, 'Message read event received');
+      return {};
+    }
+  };
 
-    // Still start health check server for HF
-    const app = express();
-    app.get('/health', (_req, res) => res.json({ status: 'ok', mode: 'websocket' }));
-    app.listen(FEISHU_WEBHOOK_PORT, () => {
-      logger.info({ port: FEISHU_WEBHOOK_PORT }, 'Health check server listening');
-    });
+  dispatcher.register(handlers);
 
-  } else {
-    // Webhook mode for local deployment
-    const app = createWebhookApp();
-    const server = http.createServer(app);
+  // Start WebSocket connection
+  wsClient.start({ eventDispatcher: dispatcher }).catch((err) => {
+    logger.error({ err }, 'Failed to start Feishu WebSocket client');
+    process.exit(1);
+  });
 
-    server.listen(FEISHU_WEBHOOK_PORT, () => {
-      logger.info(
-        { port: FEISHU_WEBHOOK_PORT },
-        `Feishu webhook server listening`,
-      );
-      if (!process.env.SPACE_ID) {
-        console.log(`\n⏳ Starting Cloudflare tunnel...\n`);
-        startCloudflareTunnel();
-      }
-    });
-  }
+  // Start health check server (useful for both local and HF)
+  const app = express();
+  app.get('/health', (_req, res) => res.json({ status: 'ok', mode: 'websocket' }));
+  app.listen(FEISHU_WEBHOOK_PORT, () => {
+    logger.info({ port: FEISHU_WEBHOOK_PORT }, 'Health check server listening');
+  });
 
   // Start IPC watcher
   startIpcWatcher();
