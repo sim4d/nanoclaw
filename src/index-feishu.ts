@@ -61,6 +61,7 @@ const GROUP_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 let sessions: Session = {};
 let registeredGroups: Record<string, RegisteredGroup> = {};
 let lastAgentTimestamp: Record<string, string> = {};
+const processedMessageIds = new Set<string>();
 
 interface FeishuState {
   last_timestamp?: string;
@@ -146,6 +147,17 @@ function getAvailableGroups(): AvailableGroup[] {
 }
 
 async function processFeishuMessage(msg: FeishuMessage): Promise<void> {
+  if (processedMessageIds.has(msg.message_id)) {
+    logger.info({ messageId: msg.message_id }, 'Message already processed, skipping');
+    return;
+  }
+  processedMessageIds.add(msg.message_id);
+  // Keep set size reasonable
+  if (processedMessageIds.size > 1000) {
+    const firstValue = processedMessageIds.values().next().value;
+    if (firstValue) processedMessageIds.delete(firstValue);
+  }
+
   const group = registeredGroups[msg.chat_id];
   if (!group) {
     logger.debug({ chatId: msg.chat_id }, 'Message from unregistered chat, ignoring');
@@ -175,7 +187,7 @@ async function processFeishuMessage(msg: FeishuMessage): Promise<void> {
   const sinceTimestamp = lastAgentTimestamp[msg.chat_id] || '';
   const missedMessages = getMessagesSince(
     msg.chat_id,
-    '', 
+    sinceTimestamp, 
     ASSISTANT_NAME,
   );
 
@@ -187,7 +199,7 @@ async function processFeishuMessage(msg: FeishuMessage): Promise<void> {
       sender: msg.sender_id,
       sender_name: msg.sender_name,
       content: msg.content,
-      timestamp: msg.timestamp.toString(),
+      timestamp: msg.create_time, // Use ISO string for consistency
     });
   }
 
@@ -196,10 +208,6 @@ async function processFeishuMessage(msg: FeishuMessage): Promise<void> {
     sinceTimestamp,
     missedMessagesCount: missedMessages.length
   }, 'Retrieved messages for agent');
-
-  // If there's a trigger, we might want to strip it for the agent's prompt
-  // but keep the full message in history for context.
-  // For now, we'll just send the messages as-is.
 
   const lines = missedMessages.map((m) => {
     const escapeXml = (s: string) =>
@@ -236,7 +244,7 @@ async function processFeishuMessage(msg: FeishuMessage): Promise<void> {
 
   const response = await runAgent(group, prompt, msg.chat_id);
 
-  if (response) {
+  if (response !== null) {
     lastAgentTimestamp[msg.chat_id] = msg.create_time;
     saveState();
 
@@ -250,6 +258,8 @@ async function processFeishuMessage(msg: FeishuMessage): Promise<void> {
     } else {
       logger.error({ chatId: msg.chat_id }, 'Failed to send response');
     }
+  } else {
+    logger.warn({ chatId: msg.chat_id }, 'Agent returned null response');
   }
 }
 
@@ -866,6 +876,15 @@ async function main(): Promise<void> {
     registeredGroups: () => registeredGroups,
     getSessions: () => sessions,
   });
+
+  // App heartbeat
+  setInterval(() => {
+    logger.info({ 
+      uptime: process.uptime(),
+      memory: process.memoryUsage().rss,
+      registeredGroups: Object.keys(registeredGroups).length
+    }, 'NanoClaw Heartbeat');
+  }, 60000);
 
   // Periodic sync
   setInterval(() => {
