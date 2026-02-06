@@ -241,7 +241,11 @@ async function main(): Promise<void> {
       options: {
         model: process.env.ANTHROPIC_MODEL,
         fallbackModel: process.env.ANTHROPIC_SMALL_FAST_MODEL,
+        stderr: (data) => {
+          log(`[claude-stderr] ${data}`);
+        },
         spawnClaudeCodeProcess: (opts) => {
+          log(`Spawning: ${process.execPath} ${opts.args.join(' ')}`);
           return spawn(process.execPath, opts.args, {
             cwd: opts.cwd,
             env: opts.env,
