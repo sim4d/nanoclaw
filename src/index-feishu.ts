@@ -136,13 +136,13 @@ async function syncGroupMetadata(): Promise<void> {
 
 function getAvailableGroups(): AvailableGroup[] {
   const chats = getAllChats();
-  const registeredJids = new Set(Object.keys(registeredGroups));
+  const registeredChatIds = new Set(Object.keys(registeredGroups));
 
   return chats.map((c) => ({
-    jid: c.jid,
+    chatId: c.chat_id,
     name: c.name,
     lastActivity: c.last_message_time,
-    isRegistered: registeredJids.has(c.jid),
+    isRegistered: registeredChatIds.has(c.chat_id),
   }));
 }
 
@@ -195,7 +195,7 @@ async function processFeishuMessage(msg: FeishuMessage): Promise<void> {
   if (!missedMessages.find(m => m.id === msg.message_id)) {
     missedMessages.push({
       id: msg.message_id,
-      chat_jid: msg.chat_id,
+      chat_id: msg.chat_id,
       sender: msg.sender_id,
       sender_name: msg.sender_name,
       content: msg.content,
@@ -266,7 +266,7 @@ async function processFeishuMessage(msg: FeishuMessage): Promise<void> {
 async function runAgent(
   group: RegisteredGroup,
   prompt: string,
-  chatJid: string,
+  chatId: string,
 ): Promise<string | null> {
   const isMain = group.folder === MAIN_GROUP_FOLDER;
   const sessionId = sessions[group.folder];
@@ -301,7 +301,7 @@ async function runAgent(
       prompt,
       sessionId,
       groupFolder: group.folder,
-      chatJid,
+      chatId,
       isMain,
     });
 
@@ -357,25 +357,25 @@ function startIpcWatcher(): void {
             const filePath = path.join(messagesDir, file);
             try {
               const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-              if (data.type === 'message' && data.chatJid && data.text) {
-                const targetGroup = registeredGroups[data.chatJid];
+              if (data.type === 'message' && data.chatId && data.text) {
+                const targetGroup = registeredGroups[data.chatId];
                 if (
                   isMain ||
                   (targetGroup && targetGroup.folder === sourceGroup)
                 ) {
                   const sendResult = await sendFeishuMessage(
-                    data.chatJid,
+                    data.chatId,
                     `${ASSISTANT_NAME}: ${data.text}`,
                   );
                   if (sendResult) {
                     logger.info(
-                      { chatJid: data.chatJid, sourceGroup },
+                      { chatId: data.chatId, sourceGroup },
                       'IPC message sent',
                     );
                   }
                 } else {
                   logger.warn(
-                    { chatJid: data.chatJid, sourceGroup },
+                    { chatId: data.chatId, sourceGroup },
                     'Unauthorized IPC message attempt blocked',
                   );
                 }
@@ -402,7 +402,7 @@ function startIpcWatcher(): void {
         );
       }
 
-      // Process tasks (simplified - same logic as WhatsApp version)
+      // Process tasks (simplified - same logic as Feishu version)
       try {
         if (fs.existsSync(tasksDir)) {
           const taskFiles = fs
@@ -472,11 +472,11 @@ async function processTaskIpc(
           break;
         }
 
-        const targetJid = Object.entries(registeredGroups).find(
+        const targetChatId = Object.entries(registeredGroups).find(
           ([, group]) => group.folder === targetGroup,
         )?.[0];
 
-        if (!targetJid) {
+        if (!targetChatId) {
           logger.warn(
             { targetGroup },
             'Cannot schedule task: target group not registered',
@@ -531,7 +531,7 @@ async function processTaskIpc(
         createTask({
           id: taskId,
           group_folder: targetGroup,
-          chat_jid: targetJid,
+          chat_id: targetChatId,
           prompt: data.prompt,
           schedule_type: scheduleType,
           schedule_value: data.schedule_value,
@@ -553,7 +553,7 @@ async function processTaskIpc(
     case 'cancel_task':
     case 'refresh_groups':
     case 'register_group':
-      // Implement same as WhatsApp version
+      // Implement same as Feishu version
       logger.debug({ type: data.type, sourceGroup }, 'IPC task type received');
       break;
   }
@@ -616,15 +616,11 @@ async function handleFeishuEvent(data: any): Promise<any> {
         // Store message in database
         storeMessage(
           {
-            key: {
-              remoteJid: msg.chat_id,
-              fromMe: false,
-              id: msg.message_id,
-            },
-            message: { conversation: msg.content },
-            messageTimestamp: Math.floor(msg.timestamp / 1000),
-            pushName: msg.sender_name,
-          } as any,
+            id: msg.message_id,
+            content: msg.content,
+            timestamp: msg.create_time,
+            sender: msg.sender_id,
+          },
           msg.chat_id,
           false,
           msg.sender_name,
@@ -878,15 +874,22 @@ async function main(): Promise<void> {
 
   // Start scheduler
   startSchedulerLoop({
-    sendMessage: async (jid: string, text: string) => {
-      const result = await sendFeishuMessage(jid, text);
+    sendMessage: async (chatId: string, text: string) => {
+      const result = await sendFeishuMessage(chatId, text);
       if (!result) {
-        logger.error({ jid }, 'Failed to send scheduled message');
+        logger.error({ chatId }, 'Failed to send scheduled message');
       }
     },
     registeredGroups: () => registeredGroups,
     getSessions: () => sessions,
   });
+
+  // Periodic sync
+  setInterval(() => {
+    syncGroupMetadata().catch((err) =>
+      logger.error({ err }, 'Periodic sync failed'),
+    );
+  }, GROUP_SYNC_INTERVAL_MS);
 
   // App heartbeat
   setInterval(() => {
@@ -896,13 +899,6 @@ async function main(): Promise<void> {
       registeredGroups: Object.keys(registeredGroups).length
     }, 'NanoClaw Heartbeat');
   }, 60000);
-
-  // Periodic sync
-  setInterval(() => {
-    syncGroupMetadata().catch((err) =>
-      logger.error({ err }, 'Periodic sync failed'),
-    );
-  }, GROUP_SYNC_INTERVAL_MS);
 }
 
 main().catch((err) => {

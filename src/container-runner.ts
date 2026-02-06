@@ -60,7 +60,7 @@ export interface ContainerInput {
   prompt: string;
   sessionId?: string;
   groupFolder: string;
-  chatJid: string;
+  chatId: string;
   isMain: boolean;
   isScheduledTask?: boolean;
 }
@@ -527,7 +527,7 @@ export function writeTasksSnapshot(
 }
 
 export interface AvailableGroup {
-  jid: string;
+  chatId: string;
   name: string;
   lastActivity: string;
   isRegistered: boolean;
@@ -542,7 +542,7 @@ export function writeGroupsSnapshot(
   groupFolder: string,
   isMain: boolean,
   groups: AvailableGroup[],
-  registeredJids: Set<string>,
+  registeredChatIds: Set<string>,
 ): void {
   const groupIpcDir = path.join(DATA_DIR, 'ipc', groupFolder);
   fs.mkdirSync(groupIpcDir, { recursive: true });

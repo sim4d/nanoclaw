@@ -21,7 +21,7 @@ import { logger } from './logger.js';
 import { RegisteredGroup, ScheduledTask } from './types.js';
 
 export interface SchedulerDependencies {
-  sendMessage: (jid: string, text: string) => Promise<void>;
+  sendMessage: (chatId: string, text: string) => Promise<void>;
   registeredGroups: () => Record<string, RegisteredGroup>;
   getSessions: () => Record<string, string>;
 }
@@ -90,7 +90,7 @@ async function runTask(
       prompt: task.prompt,
       sessionId,
       groupFolder: task.group_folder,
-      chatJid: task.chat_jid,
+      chatId: task.chat_id,
       isMain,
       isScheduledTask: true,
     });

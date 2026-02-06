@@ -13,7 +13,7 @@ interface ContainerInput {
   prompt: string;
   sessionId?: string;
   groupFolder: string;
-  chatJid: string;
+  chatId: string;
   isMain: boolean;
   isScheduledTask?: boolean;
 }
@@ -311,8 +311,8 @@ async function runAgentWithTools(
   // Initialize the Generative AI client
   const genAI = new GoogleGenerativeAI(apiKey);
 
-  // Use model from environment or default to gemini-1.5-flash
-  const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+  // Use model from environment or default to gemini-2.5-flash
+  const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   log(`Using model: ${modelName}`);
 
   const model = genAI.getGenerativeModel({

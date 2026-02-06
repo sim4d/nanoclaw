@@ -47,7 +47,7 @@ export interface Session {
 
 export interface NewMessage {
   id: string;
-  chat_jid: string;
+  chat_id: string;
   sender: string;
   sender_name: string;
   content: string;
@@ -57,7 +57,7 @@ export interface NewMessage {
 export interface ScheduledTask {
   id: string;
   group_folder: string;
-  chat_jid: string;
+  chat_id: string;
   prompt: string;
   schedule_type: 'cron' | 'interval' | 'once';
   schedule_value: string;

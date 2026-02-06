@@ -2,8 +2,6 @@ import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 
-import { proto } from '@whiskeysockets/baileys';
-
 import { STORE_DIR } from './config.js';
 import { NewMessage, ScheduledTask, TaskRunLog } from './types.js';
 
@@ -16,27 +14,27 @@ export function initDatabase(): void {
   db = new Database(dbPath);
   db.exec(`
     CREATE TABLE IF NOT EXISTS chats (
-      jid TEXT PRIMARY KEY,
+      chat_id TEXT PRIMARY KEY,
       name TEXT,
       last_message_time TEXT
     );
     CREATE TABLE IF NOT EXISTS messages (
       id TEXT,
-      chat_jid TEXT,
+      chat_id TEXT,
       sender TEXT,
       sender_name TEXT,
       content TEXT,
       timestamp TEXT,
       is_from_me INTEGER,
-      PRIMARY KEY (id, chat_jid),
-      FOREIGN KEY (chat_jid) REFERENCES chats(jid)
+      PRIMARY KEY (id, chat_id),
+      FOREIGN KEY (chat_id) REFERENCES chats(chat_id)
     );
     CREATE INDEX IF NOT EXISTS idx_timestamp ON messages(timestamp);
 
     CREATE TABLE IF NOT EXISTS scheduled_tasks (
       id TEXT PRIMARY KEY,
       group_folder TEXT NOT NULL,
-      chat_jid TEXT NOT NULL,
+      chat_id TEXT NOT NULL,
       prompt TEXT NOT NULL,
       schedule_type TEXT NOT NULL,
       schedule_value TEXT NOT NULL,
@@ -62,6 +60,34 @@ export function initDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_task_run_logs ON task_run_logs(task_id, run_at);
   `);
 
+  // Migration: rename columns if they exist
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(chats)").all() as any[];
+    if (tableInfo.some(c => c.name === 'jid')) {
+      db.exec(`ALTER TABLE chats RENAME COLUMN jid TO chat_id`);
+    }
+  } catch (err) {
+    /* column may not exist or rename failed */
+  }
+
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(messages)").all() as any[];
+    if (tableInfo.some(c => c.name === 'chat_jid')) {
+      db.exec(`ALTER TABLE messages RENAME COLUMN chat_jid TO chat_id`);
+    }
+  } catch (err) {
+    /* column may not exist or rename failed */
+  }
+
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(scheduled_tasks)").all() as any[];
+    if (tableInfo.some(c => c.name === 'chat_jid')) {
+      db.exec(`ALTER TABLE scheduled_tasks RENAME COLUMN chat_jid TO chat_id`);
+    }
+  } catch (err) {
+    /* column may not exist or rename failed */
+  }
+
   // Add sender_name column if it doesn't exist (migration for existing DBs)
   try {
     db.exec(`ALTER TABLE messages ADD COLUMN sender_name TEXT`);
@@ -84,7 +110,7 @@ export function initDatabase(): void {
  * Used for all chats to enable group discovery without storing sensitive content.
  */
 export function storeChatMetadata(
-  chatJid: string,
+  chatId: string,
   timestamp: string,
   name?: string,
 ): void {
@@ -92,21 +118,21 @@ export function storeChatMetadata(
     // Update with name, preserving existing timestamp if newer
     db.prepare(
       `
-      INSERT INTO chats (jid, name, last_message_time) VALUES (?, ?, ?)
-      ON CONFLICT(jid) DO UPDATE SET
+      INSERT INTO chats (chat_id, name, last_message_time) VALUES (?, ?, ?)
+      ON CONFLICT(chat_id) DO UPDATE SET
         name = excluded.name,
         last_message_time = MAX(last_message_time, excluded.last_message_time)
     `,
-    ).run(chatJid, name, timestamp);
+    ).run(chatId, name, timestamp);
   } else {
     // Update timestamp only, preserve existing name if any
     db.prepare(
       `
-      INSERT INTO chats (jid, name, last_message_time) VALUES (?, ?, ?)
-      ON CONFLICT(jid) DO UPDATE SET
+      INSERT INTO chats (chat_id, name, last_message_time) VALUES (?, ?, ?)
+      ON CONFLICT(chat_id) DO UPDATE SET
         last_message_time = MAX(last_message_time, excluded.last_message_time)
     `,
-    ).run(chatJid, chatJid, timestamp);
+    ).run(chatId, chatId, timestamp);
   }
 }
 
@@ -115,17 +141,17 @@ export function storeChatMetadata(
  * New chats get the current time as their initial timestamp.
  * Used during group metadata sync.
  */
-export function updateChatName(chatJid: string, name: string): void {
+export function updateChatName(chatId: string, name: string): void {
   db.prepare(
     `
-    INSERT INTO chats (jid, name, last_message_time) VALUES (?, ?, ?)
-    ON CONFLICT(jid) DO UPDATE SET name = excluded.name
+    INSERT INTO chats (chat_id, name, last_message_time) VALUES (?, ?, ?)
+    ON CONFLICT(chat_id) DO UPDATE SET name = excluded.name
   `,
-  ).run(chatJid, name, new Date().toISOString());
+  ).run(chatId, name, new Date().toISOString());
 }
 
 export interface ChatInfo {
-  jid: string;
+  chat_id: string;
   name: string;
   last_message_time: string;
 }
@@ -137,7 +163,7 @@ export function getAllChats(): ChatInfo[] {
   return db
     .prepare(
       `
-    SELECT jid, name, last_message_time
+    SELECT chat_id, name, last_message_time
     FROM chats
     ORDER BY last_message_time DESC
   `,
@@ -151,7 +177,7 @@ export function getAllChats(): ChatInfo[] {
 export function getLastGroupSync(): string | null {
   // Store sync time in a special chat entry
   const row = db
-    .prepare(`SELECT last_message_time FROM chats WHERE jid = '__group_sync__'`)
+    .prepare(`SELECT last_message_time FROM chats WHERE chat_id = '__group_sync__'`)
     .get() as { last_message_time: string } | undefined;
   return row?.last_message_time || null;
 }
@@ -162,7 +188,7 @@ export function getLastGroupSync(): string | null {
 export function setLastGroupSync(): void {
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT OR REPLACE INTO chats (jid, name, last_message_time) VALUES ('__group_sync__', '__group_sync__', ?)`,
+    `INSERT OR REPLACE INTO chats (chat_id, name, last_message_time) VALUES ('__group_sync__', '__group_sync__', ?)`,
   ).run(now);
 }
 
@@ -171,57 +197,43 @@ export function setLastGroupSync(): void {
  * Only call this for registered groups where message history is needed.
  */
 export function storeMessage(
-  msg: proto.IWebMessageInfo,
-  chatJid: string,
+  msg: { id: string; content: string; timestamp: string; sender: string },
+  chatId: string,
   isFromMe: boolean,
-  pushName?: string,
+  senderName?: string,
 ): void {
-  if (!msg.key) return;
-
-  const content =
-    msg.message?.conversation ||
-    msg.message?.extendedTextMessage?.text ||
-    msg.message?.imageMessage?.caption ||
-    msg.message?.videoMessage?.caption ||
-    '';
-
-  const timestamp = new Date(Number(msg.messageTimestamp) * 1000).toISOString();
-  const sender = msg.key.participant || msg.key.remoteJid || '';
-  const senderName = pushName || sender.split('@')[0];
-  const msgId = msg.key.id || '';
-
   db.prepare(
-    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO messages (id, chat_id, sender, sender_name, content, timestamp, is_from_me) VALUES (?, ?, ?, ?, ?, ?, ?)`,
   ).run(
-    msgId,
-    chatJid,
-    sender,
-    senderName,
-    content,
-    timestamp,
+    msg.id,
+    chatId,
+    msg.sender,
+    senderName || msg.sender,
+    msg.content,
+    msg.timestamp,
     isFromMe ? 1 : 0,
   );
 }
 
 export function getNewMessages(
-  jids: string[],
+  chatIds: string[],
   lastTimestamp: string,
   botPrefix: string,
 ): { messages: NewMessage[]; newTimestamp: string } {
-  if (jids.length === 0) return { messages: [], newTimestamp: lastTimestamp };
+  if (chatIds.length === 0) return { messages: [], newTimestamp: lastTimestamp };
 
-  const placeholders = jids.map(() => '?').join(',');
+  const placeholders = chatIds.map(() => '?').join(',');
   // Filter out bot's own messages by checking content prefix (not is_from_me, since user shares the account)
   const sql = `
-    SELECT id, chat_jid, sender, sender_name, content, timestamp
+    SELECT id, chat_id, sender, sender_name, content, timestamp
     FROM messages
-    WHERE timestamp > ? AND chat_jid IN (${placeholders}) AND content NOT LIKE ?
+    WHERE timestamp > ? AND chat_id IN (${placeholders}) AND content NOT LIKE ?
     ORDER BY timestamp
   `;
 
   const rows = db
     .prepare(sql)
-    .all(lastTimestamp, ...jids, `${botPrefix}:%`) as NewMessage[];
+    .all(lastTimestamp, ...chatIds, `${botPrefix}:%`) as NewMessage[];
 
   let newTimestamp = lastTimestamp;
   for (const row of rows) {
@@ -232,23 +244,20 @@ export function getNewMessages(
 }
 
 export function getMessagesSince(
-  chatJid: string,
+  chatId: string,
   sinceTimestamp: string,
   botPrefix: string,
 ): NewMessage[] {
   // Filter out bot's own messages by checking content prefix
   const sql = `
-    SELECT id, chat_jid, sender, sender_name, content, timestamp
+    SELECT id, chat_id, sender, sender_name, content, timestamp
     FROM messages
-    WHERE chat_jid = ? AND timestamp > ? AND content NOT LIKE ?
+    WHERE chat_id = ? AND timestamp > ? AND content NOT LIKE ?
     ORDER BY timestamp
   `;
-  const messages = db
+  return db
     .prepare(sql)
-    .all(chatJid, sinceTimestamp, `${botPrefix}:%`) as NewMessage[];
-  
-  // logger.debug({ chatJid, sinceTimestamp, count: messages.length }, 'getMessagesSince query completed');
-  return messages;
+    .all(chatId, sinceTimestamp, `${botPrefix}:%`) as NewMessage[];
 }
 
 export function createTask(
@@ -256,13 +265,13 @@ export function createTask(
 ): void {
   db.prepare(
     `
-    INSERT INTO scheduled_tasks (id, group_folder, chat_jid, prompt, schedule_type, schedule_value, context_mode, next_run, status, created_at)
+    INSERT INTO scheduled_tasks (id, group_folder, chat_id, prompt, schedule_type, schedule_value, context_mode, next_run, status, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `,
   ).run(
     task.id,
     task.group_folder,
-    task.chat_jid,
+    task.chat_id,
     task.prompt,
     task.schedule_type,
     task.schedule_value,
