@@ -208,7 +208,14 @@ async function processFeishuMessage(msg: FeishuMessage): Promise<void> {
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
-    return `<message sender="${escapeXml(m.sender_name)}" time="${m.timestamp}">${escapeXml(m.content)}</message>`;
+    
+    // Strip trigger if present at the start of the message
+    let processedContent = m.content;
+    if (TRIGGER_PATTERN.test(processedContent)) {
+      processedContent = processedContent.replace(TRIGGER_PATTERN, '').trim();
+    }
+
+    return `<message sender="${escapeXml(m.sender_name)}" time="${m.timestamp}">${escapeXml(processedContent)}</message>`;
   });
   const prompt = `<messages>\n${lines.join('\n')}\n</messages>`;
 
