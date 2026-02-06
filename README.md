@@ -49,7 +49,7 @@ Configure the following variables in your `.env` (local) or as **Secrets** (Hugg
 - *Ensure "Receive events via persistent connection" is enabled in your Feishu app settings.*
 
 ### LLM (CLIProxyAPI)
-- `ANTHROPIC_BASE_URL`: Your proxy endpoint (e.g., `https://simford-cpa.hf.space`).
+- `ANTHROPIC_BASE_URL`: Your proxy endpoint (e.g., `http://127.0.0.1:8317`).
 - `ANTHROPIC_AUTH_TOKEN`: Your API token.
 - `ANTHROPIC_MODEL`: Primary model (e.g., `gemini-2.5-pro`).
 - `ANTHROPIC_SMALL_FAST_MODEL`: Fallback/fast model (e.g., `gemini-2.5-flash`).
