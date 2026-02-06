@@ -224,6 +224,11 @@ async function main(): Promise<void> {
     isMain: input.isMain
   });
 
+  // Ensure ANTHROPIC_API_KEY is set (Claude Code CLI needs it)
+  if (!process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_AUTH_TOKEN) {
+    process.env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_AUTH_TOKEN;
+  }
+
   let result: string | null = null;
   let newSessionId: string | undefined;
 
@@ -246,12 +251,18 @@ async function main(): Promise<void> {
         },
         spawnClaudeCodeProcess: (opts) => {
           log(`Spawning: ${process.execPath} ${opts.args.join(' ')}`);
-          return spawn(process.execPath, opts.args, {
+          const cp = spawn(process.execPath, opts.args, {
             cwd: opts.cwd,
             env: opts.env,
             signal: opts.signal,
             stdio: ['pipe', 'pipe', 'pipe']
-          }) as unknown as SpawnedProcess;
+          });
+          
+          cp.stderr.on('data', (data) => {
+            log(`[spawn-stderr] ${data}`);
+          });
+
+          return cp as unknown as SpawnedProcess;
         },
         cwd: process.env.WORKSPACE_GROUP || '/workspace/group',
         resume: input.sessionId,
