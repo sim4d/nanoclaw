@@ -160,6 +160,7 @@ function buildVolumeMounts(
       'ANTHROPIC_MODEL',
       'ANTHROPIC_SMALL_FAST_MODEL',
       'GEMINI_API_KEY',
+      'GEMINI_MODEL',
       'FEISHU_APP_ID',
       'FEISHU_APP_SECRET',
       // FEISHU_ENCRYPT_KEY and FEISHU_VERIFICATION_TOKEN are NOT needed for WebSocket mode

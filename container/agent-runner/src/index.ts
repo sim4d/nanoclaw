@@ -311,9 +311,12 @@ async function runAgentWithTools(
   // Initialize the Generative AI client
   const genAI = new GoogleGenerativeAI(apiKey);
 
-  // Use gemini-2.5-pro for high quality responses
+  // Use model from environment or default to gemini-1.5-flash
+  const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+  log(`Using model: ${modelName}`);
+
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-pro',
+    model: modelName,
     tools: [{ functionDeclarations: FUNCTION_DECLARATIONS }],
   });
 
