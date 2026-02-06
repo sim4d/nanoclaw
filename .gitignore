@@ -4,10 +4,20 @@ node_modules/
 # Build output
 dist/
 
-# Local data & auth
+# Local data, state & logs
 store/
 data/
 logs/
+*.log
+
+# Per-group data
+groups/*/
+!groups/global/
+!groups/main/
+groups/main/*
+!groups/main/CLAUDE.md
+groups/global/*
+!groups/global/CLAUDE.md
 
 # Secrets
 *.keys.json
@@ -20,5 +30,5 @@ logs/
 .idea/
 .vscode/
 
+# Docs
 agents-sdk-docs
-groups/*/logs/
