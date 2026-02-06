@@ -15,7 +15,8 @@ export function createIpcMcp(options: IpcMcpOptions): McpServer {
     version: '1.0.0',
   });
 
-  const ipcDir = '/workspace/ipc';
+  const ipcDir = process.env.WORKSPACE_IPC || '/workspace/ipc';
+  console.error(`[ipc-mcp] Using IPC directory: ${ipcDir}`);
   const messagesDir = path.join(ipcDir, 'messages');
   const tasksDir = path.join(ipcDir, 'tasks');
 

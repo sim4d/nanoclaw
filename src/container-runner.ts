@@ -285,6 +285,7 @@ export async function runContainerAgent(
           WORKSPACE_GROUP: path.join(GROUPS_DIR, group.folder),
           WORKSPACE_GLOBAL: path.join(GROUPS_DIR, 'global'),
           WORKSPACE_PROJECT: process.cwd(),
+          WORKSPACE_IPC: path.join(DATA_DIR, 'ipc', group.folder),
         }
       });
     } else {
