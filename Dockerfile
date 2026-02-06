@@ -24,8 +24,11 @@ RUN npm run build
 # Build TypeScript (Agent Runner)
 RUN cd container/agent-runner && npm install && npm run build
 
-# Create required directories for data persistence
-RUN mkdir -p data groups store logs
+# Create required directories for data persistence and set ownership
+RUN mkdir -p data groups store logs && chown -R node:node /app
+
+# Switch to non-root user (required for --allow-dangerously-skip-permissions)
+USER node
 
 # Set environment variables
 ENV NODE_ENV=production
