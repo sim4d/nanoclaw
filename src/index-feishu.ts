@@ -573,8 +573,8 @@ async function handleFeishuEvent(data: any): Promise<any> {
         );
 
         const newGroup = {
-          name: 'main',
-          folder: 'main',
+          name: MAIN_GROUP_FOLDER,
+          folder: MAIN_GROUP_FOLDER,
           trigger: `@${ASSISTANT_NAME}`,
           added_at: new Date().toISOString(),
         };
