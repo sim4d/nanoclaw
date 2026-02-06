@@ -154,17 +154,20 @@ async function processFeishuMessage(msg: FeishuMessage): Promise<void> {
 
   const content = msg.content.trim();
   const isMainGroup = group.folder === MAIN_GROUP_FOLDER;
+  const hasTrigger = TRIGGER_PATTERN.test(content);
 
   logger.info({ 
     chatId: msg.chat_id, 
+    groupFolder: group.folder,
     isMainGroup, 
     content,
+    hasTrigger,
     triggerPattern: TRIGGER_PATTERN.toString()
   }, 'Processing message details');
 
   // Main group responds to all messages; other groups require trigger prefix
-  if (!isMainGroup && !TRIGGER_PATTERN.test(content)) {
-    logger.info({ chatId: msg.chat_id, content }, 'Message without trigger, ignoring');
+  if (!isMainGroup && !hasTrigger) {
+    logger.info({ chatId: msg.chat_id, content }, 'Message without trigger in non-main group, ignoring');
     return;
   }
 
@@ -192,7 +195,11 @@ async function processFeishuMessage(msg: FeishuMessage): Promise<void> {
     chatId: msg.chat_id,
     sinceTimestamp,
     missedMessagesCount: missedMessages.length
-  }, 'Retrieved missed messages');
+  }, 'Retrieved messages for agent');
+
+  // If there's a trigger, we might want to strip it for the agent's prompt
+  // but keep the full message in history for context.
+  // For now, we'll just send the messages as-is.
 
   const lines = missedMessages.map((m) => {
     const escapeXml = (s: string) =>
@@ -205,11 +212,9 @@ async function processFeishuMessage(msg: FeishuMessage): Promise<void> {
   });
   const prompt = `<messages>\n${lines.join('\n')}\n</messages>`;
 
-  // Debug: log the actual messages being sent
   logger.info({
     chatId: msg.chat_id,
     messageCount: missedMessages.length,
-    promptPreview: prompt.substring(0, 500) + '...'
   }, 'Messages being sent to agent');
 
   if (!prompt || lines.length === 0) {
@@ -550,7 +555,7 @@ async function handleFeishuEvent(data: any): Promise<any> {
       // Store message
       storeChatMetadata(msg.chat_id, msg.create_time);
 
-      const group = registeredGroups[msg.chat_id];
+      let group = registeredGroups[msg.chat_id];
       logger.info({ chatId: msg.chat_id, hasGroup: !!group }, 'Feishu message received and parsed');
 
       // Auto-register first chat as main channel if no groups registered yet
@@ -560,12 +565,14 @@ async function handleFeishuEvent(data: any): Promise<any> {
           'Auto-registering first chat as main channel',
         );
 
-        registerGroup(msg.chat_id, {
+        const newGroup = {
           name: 'main',
           folder: 'main',
           trigger: `@${ASSISTANT_NAME}`,
           added_at: new Date().toISOString(),
-        });
+        };
+        registerGroup(msg.chat_id, newGroup);
+        group = newGroup;
 
         // Send welcome message
         sendFeishuMessage(
@@ -577,6 +584,7 @@ async function handleFeishuEvent(data: any): Promise<any> {
       }
 
       if (group) {
+        logger.info({ chatId: msg.chat_id, isMain: group.folder === MAIN_GROUP_FOLDER }, 'Group found, storing and processing message');
         // Store message in database
         storeMessage(
           {
@@ -598,6 +606,8 @@ async function handleFeishuEvent(data: any): Promise<any> {
         processFeishuMessage(msg).catch((err) => {
           logger.error({ err, messageId: msg.message_id }, 'Error processing message');
         });
+      } else {
+        logger.info({ chatId: msg.chat_id }, 'No group found for message and not auto-registered');
       }
     } else {
       logger.info({ 
